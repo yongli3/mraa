@@ -99,6 +99,9 @@ mraa_init()
 #elif ARMPLAT
     // Use runtime ARM platform detection
     platform_type = mraa_arm_platform();
+#elif MIPSPLAT
+    // Use runtime MIPS platform detection
+    platform_type = mraa_mips_platform();
 #else
     #error mraa_ARCH NOTHING
 #endif
