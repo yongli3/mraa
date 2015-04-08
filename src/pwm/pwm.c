@@ -209,9 +209,10 @@ mraa_pwm_init(int pin)
 
     int chip = plat->pins[pin].pwm.parent_id;
     int pinn = plat->pins[pin].pwm.pinmap;
+    mraa_pwm_context pret = mraa_pwm_init_raw(chip, pinn);
+    pret->phy_pin = pin;
 
     if (advance_func->pwm_init_post != NULL) {
-        mraa_pwm_context pret = mraa_pwm_init_raw(chip, pinn);
         mraa_result_t ret = advance_func->pwm_init_post(pret);
         if (ret != MRAA_SUCCESS) {
             free(pret);
@@ -219,7 +220,7 @@ mraa_pwm_init(int pin)
         }
         return pret;
     }
-    return mraa_pwm_init_raw(chip, pinn);
+    return pret;
 }
 
 mraa_pwm_context
@@ -232,6 +233,7 @@ mraa_pwm_init_raw(int chipin, int pin)
     dev->chipid = chipin;
     dev->pin = pin;
     dev->period = -1;
+    dev->phy_pin = -1;
 
     char directory[MAX_SIZE];
     snprintf(directory, MAX_SIZE, SYSFS_PWM "/pwmchip%d/pwm%d", dev->chipid, dev->pin);
