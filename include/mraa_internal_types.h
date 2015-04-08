@@ -73,6 +73,7 @@ struct _pwm {
     int phy_pin; /**< pin passed to clean init. -1 none and raw*/
     int duty_fp; /**< File pointer to duty file */
     int period;  /**< Cache the period to speed up setting duty */
+    int duty;  /**< Stores the duty */
     mraa_boolean_t owner; /**< Owner of pwm context*/
     /*@}*/
 };

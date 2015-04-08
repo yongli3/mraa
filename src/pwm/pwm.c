@@ -90,8 +90,10 @@ mraa_pwm_write_duty(mraa_pwm_context dev, int duty)
     }
     char bu[64];
     int length = sprintf(bu, "%d", duty);
-    if (write(dev->duty_fp, bu, length * sizeof(char)) == -1)
+    if (write(dev->duty_fp, bu, length * sizeof(char)) == -1) {
         return MRAA_ERROR_INVALID_RESOURCE;
+    }
+    dev->duty = duty;
     return MRAA_SUCCESS;
 }
 
