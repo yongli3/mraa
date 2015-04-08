@@ -105,6 +105,14 @@ mraa_boolean_t mraa_file_contains_both(const char* filename, const char* content
  */
 mraa_boolean_t mraa_link_targets(const char* filename, const char* targetname);
 
+/**
+ * Setup PWM contexts file pointer for the duty file
+ *
+ * @param dev pwm context
+ * @return int fp for the context
+ */
+int mraa_pwm_setup_duty_fp(mraa_pwm_context dev);
+
 #ifdef __cplusplus
 }
 #endif

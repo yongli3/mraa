@@ -33,7 +33,7 @@
 #define MAX_SIZE 64
 #define SYSFS_PWM "/sys/class/pwm"
 
-static int
+int
 mraa_pwm_setup_duty_fp(mraa_pwm_context dev)
 {
     char bu[MAX_SIZE];
