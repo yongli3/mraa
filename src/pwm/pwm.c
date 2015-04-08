@@ -79,6 +79,10 @@ mraa_pwm_write_period(mraa_pwm_context dev, int period)
 static mraa_result_t
 mraa_pwm_write_duty(mraa_pwm_context dev, int duty)
 {
+    if (advance_func->pwm_duty_replace != NULL) {
+        return advance_func->pwm_duty_replace(dev, duty);
+    }
+
     if (dev->duty_fp == -1) {
         if (mraa_pwm_setup_duty_fp(dev) == 1) {
             return MRAA_ERROR_INVALID_HANDLE;
