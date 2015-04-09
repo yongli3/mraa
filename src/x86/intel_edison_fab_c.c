@@ -66,6 +66,8 @@ static unsigned int pullup_map[] = { 216, 217, 218, 219, 220, 221, 222, 223, 224
                                      226, 227, 228, 229, 208, 209, 210, 211, 212, 213 };
 static int miniboard = 0;
 
+static mraa_gpio_context pwmZero[4];
+
 // MMAP
 static uint8_t* mmap_reg = NULL;
 static int mmap_fd = 0;
@@ -372,6 +374,51 @@ mraa_result_t
 mraa_intel_edison_pwm_init_post(mraa_pwm_context pwm)
 {
     return mraa_gpio_write(tristate, 1);
+}
+
+mraa_result_t
+mraa_intel_edison_pwm_duty_replace(mraa_pwm_context dev, int duty)
+{
+    if (duty == dev->duty) {
+        return MRAA_SUCCESS;
+    }
+    if (duty == 0) {
+        //close pwm set gpio nice n low
+        mraa_result_t ret = mraa_pwm_unexport_force(dev);
+        if (ret != MRAA_SUCCESS) {
+            return ret;
+        }
+        pwmZero[dev->pin] = mraa_gpio_init_raw(
+                            plat->pins[dev->phy_pin].gpio.pinmap);
+        ret = mraa_gpio_dir(pwmZero[dev->pin], MRAA_GPIO_OUT_LOW);
+        if (ret != MRAA_SUCCESS) {
+            return ret;
+        }
+
+        dev->duty = duty;
+        return MRAA_SUCCESS;
+    }
+
+    if (dev->duty == 0) {
+        mraa_gpio_close(pwmZero[dev->pin]);
+        mraa_pwm_context temp = mraa_pwm_init_raw(dev->chipid, dev->pin);
+        dev->duty_fp = temp->duty_fp;
+        mraa_pwm_period_us(dev, (dev->period / 1000));
+        free(temp);
+    }
+
+    if (dev->duty_fp == -1) {
+        if (mraa_pwm_setup_duty_fp(dev) == 1) {
+            return MRAA_ERROR_INVALID_HANDLE;
+        }
+    }
+    char bu[64];
+    int length = sprintf(bu, "%d", duty);
+    if (write(dev->duty_fp, bu, length * sizeof(char)) == -1) {
+        return MRAA_ERROR_INVALID_RESOURCE;
+    }
+    dev->duty = duty;
+    return MRAA_SUCCESS;
 }
 
 mraa_result_t
@@ -737,6 +784,7 @@ mraa_intel_edison_miniboard(mraa_board_t* b)
     advance_func->gpio_mode_replace = &mraa_intel_edsion_mb_gpio_mode;
     advance_func->uart_init_pre = &mraa_intel_edison_uart_init_pre;
     advance_func->gpio_mmap_setup = &mraa_intel_edison_mmap_setup;
+    advance_func->pwm_duty_replace = &mraa_intel_edison_pwm_duty_replace;
 
     int pos = 0;
     strncpy(b->pins[pos].name, "J17-1", 8);
@@ -1122,6 +1170,7 @@ mraa_intel_edison_fab_c()
     advance_func->uart_init_pre = &mraa_intel_edison_uart_init_pre;
     advance_func->uart_init_post = &mraa_intel_edison_uart_init_post;
     advance_func->gpio_mmap_setup = &mraa_intel_edison_mmap_setup;
+    advance_func->pwm_duty_replace = &mraa_intel_edison_pwm_duty_replace;
 
     b->pins = (mraa_pininfo_t*) malloc(sizeof(mraa_pininfo_t) * MRAA_INTEL_EDISON_PINCOUNT);
     if (b->pins == NULL) {
