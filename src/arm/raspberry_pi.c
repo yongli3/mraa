@@ -825,6 +825,8 @@ mraa_raspberry_pi()
     b->def_uart_dev = 0;
     b->uart_dev[0].rx = 10;
     b->uart_dev[0].tx = 8;
+    b->uart_dev[0].device_path = "/dev/ttyS0";
+    b->uart_dev[0].name = "ttyS0";
 
     if ((platform_detected == PLATFORM_RASPBERRY_PI_A_PLUS_REV_1) ||
         (platform_detected == PLATFORM_RASPBERRY_PI_B_PLUS_REV_1) ||

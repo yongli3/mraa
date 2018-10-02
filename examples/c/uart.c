@@ -69,6 +69,9 @@ main(int argc, char** argv)
         goto err_exit;
     }
 
+    //mraa_uart_set_baudrate
+    
+
     while (flag) {
         /* send data through UART */
         mraa_uart_write(uart, buffer, sizeof(buffer));
