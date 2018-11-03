@@ -42,13 +42,19 @@
 #define TRUE (!FALSE)
 #endif
 
+#define AP_ADDRX    0xff
+#define AP_ADDRY    0xff
+
 #define CMD_SETADDR 0
 #define CMD_ACK     1
-#define CMD_BYPASS  2
+#define CMD_REPORT  2
+#define CMD_BYPASS  3
+
+#define UART_PKT_HEADER 0xbeef
 
 typedef struct  __attribute__((packed))
 {
-    uint32_t header;
+    uint16_t header;
     uint8_t command;
     uint8_t srcx;
     uint8_t srcy;
@@ -84,10 +90,14 @@ int
 main(int argc, char** argv)
 {
     int ret = 0;
+    int read_size = 0;
     mraa_result_t status = MRAA_SUCCESS;
     mraa_uart_context uart;
-    char buffer[32] = "Hello Mraa!";
+    //char buffer[32] = "Hello Mraa!";
+    char rxbuf[sizeof(UART_PKT) * 2] = "";
+    uint16_t *pbuf = NULL;
     UART_PKT tx_pkt, rx_pkt;
+    UART_PKT *prx_pkt = NULL;
 
     int baudrate = 115200, stopbits = 1, databits = 8;
     mraa_uart_parity_t parity = MRAA_UART_PARITY_NONE;
@@ -124,24 +134,118 @@ main(int argc, char** argv)
     // start uart Rx/TX
     while (flag) {
         //sprintf(buffer, "%llu", current_timestamp());
-
-         memset(&tx_pkt, 0, sizeof(tx_pkt));
-        tx_pkt.header = 0xbeef;
+        printf("%llu set ADDR 0,0\n", current_timestamp());
+        memset(&tx_pkt, 0, sizeof(tx_pkt));
+        tx_pkt.header = UART_PKT_HEADER;
         tx_pkt.command = CMD_SETADDR;
         tx_pkt.srcx = 0xff;
         tx_pkt.srcy = 0xff;
         tx_pkt.dstx = 0x0;
         tx_pkt.dsty = 0x0;
+        tx_pkt.data = current_timestamp();
         ret = mraa_uart_write(uart, (char *)&tx_pkt, sizeof(tx_pkt));
-        usleep(1000*100);
-        //printf("%llu write %d [%s]\n", current_timestamp(), ret, buffer);
+        usleep(1000*50);
+        prx_pkt = NULL;
         if (mraa_uart_data_available(uart, 1000)) {
-            memset(&rx_pkt, 0, sizeof(rx_pkt));
-            ret = mraa_uart_read(uart, (char *)&rx_pkt, sizeof(rx_pkt));
-            printf("%llu, read %d header=%x\n", current_timestamp(), ret, rx_pkt.header);
+            // wait for ACK
+            memset(rxbuf, 0, sizeof(rxbuf));
+            ret = mraa_uart_read(uart, rxbuf, sizeof(rxbuf));
+            printf("ret=%d %x\n", ret, rxbuf[0]);
+            read_size = ret;
+            while (read_size < sizeof(UART_PKT)) {
+                ret = mraa_uart_read(uart, &rxbuf[read_size], sizeof(rxbuf) - read_size);
+                read_size += ret;
+                printf("ret=%d %d\n", ret, read_size);
+            }
+            printf("%llu, read %d %x-%x\n", current_timestamp(), read_size, rxbuf[0], rxbuf[1]);
+            pbuf = (uint16_t *) rxbuf;
+            if (read_size >= sizeof(UART_PKT)) {
+                for (int i = 0; i < read_size; i++) {
+                    printf("0x%x\n", rxbuf[i]);
+                    pbuf = (uint16_t *) &rxbuf[i];
+                    if (*pbuf == UART_PKT_HEADER) {
+                        if (i + sizeof(UART_PKT) <= read_size) {
+                            printf("FIND@%d!\n", i);
+                            prx_pkt = (UART_PKT *)pbuf;
+                            break;
+                        }
+                    }
+                }
+            }
         } else {
             printf("%llu no data!\n", current_timestamp());
         }
+
+        if (prx_pkt != NULL) {
+            memset(&rx_pkt, 0, sizeof(UART_PKT));
+            memcpy(&rx_pkt, prx_pkt, sizeof(UART_PKT));
+            printf("CMD=%d %d\n", rx_pkt.command, rx_pkt.data);
+
+            switch (rx_pkt.command) {
+                case CMD_ACK:
+                    // wait for report data; and send out ACK
+                    prx_pkt = NULL;
+                    while (1) {
+                        printf("wait for report!\n");
+                        if (mraa_uart_data_available(uart, 1000)) {
+                            memset(rxbuf, 0, sizeof(rxbuf));
+                            ret = mraa_uart_read(uart, rxbuf, sizeof(rxbuf));
+                            printf("ret=%d %x\n", ret, rxbuf[0]);
+                            read_size = ret;
+                            while (read_size < sizeof(UART_PKT)) {
+                                ret = mraa_uart_read(uart, &rxbuf[read_size], sizeof(rxbuf) - read_size);
+                                read_size += ret;
+                                printf("ret=%d %d\n", ret, read_size);
+                            }
+                            printf("%llu, read %d %x-%x\n", current_timestamp(), read_size, rxbuf[0], rxbuf[1]);
+                            pbuf = (uint16_t *) rxbuf;
+                            if (read_size >= sizeof(UART_PKT)) {
+                                for (int i = 0; i < read_size; i++) {
+                                    printf("0x%x\n", rxbuf[i]);
+                                    pbuf = (uint16_t *) &rxbuf[i];
+                                    if (*pbuf == UART_PKT_HEADER) {
+                                        if (i + sizeof(UART_PKT) <= read_size) {
+                                            printf("FIND@%d!\n", i);
+                                            prx_pkt = (UART_PKT *)pbuf;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (prx_pkt != NULL) {
+                            // report data
+                            memset(&rx_pkt, 0, sizeof(UART_PKT));
+                            memcpy(&rx_pkt, prx_pkt, sizeof(UART_PKT));
+                            printf("CMD=%d %d\n", rx_pkt.command, rx_pkt.data);
+                            switch (rx_pkt.command) {
+                                case CMD_REPORT:
+                                    printf("Get REPORT: %d,%d->%d,%d %d\n", rx_pkt.srcx, rx_pkt.srcy, rx_pkt.dstx, rx_pkt.dsty, rx_pkt.data);
+                                    // send out ACK
+                                    memset(&tx_pkt, 0, sizeof(UART_PKT));
+                                    tx_pkt.header = UART_PKT_HEADER;
+                                    tx_pkt.command = CMD_ACK;
+                                    tx_pkt.srcx = AP_ADDRX;
+                                    tx_pkt.srcy = AP_ADDRY;
+                                    tx_pkt.dstx = rx_pkt.srcx;
+                                    tx_pkt.dsty = rx_pkt.srcy;
+                                    ret = mraa_uart_write(uart, (char *)&tx_pkt, sizeof(tx_pkt));
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                        usleep(1000*100);
+                    }
+                    
+                    break;
+                default:
+                    printf("Get incorrect CMD %d\n", rx_pkt.command);
+                    break;
+            }
+        }
+        
         usleep(1000*100);
     }
 
